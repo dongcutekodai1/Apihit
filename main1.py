@@ -3,6 +3,7 @@ import threading
 import time
 import os
 import logging
+import random
 from urllib.request import urlopen, Request
 from flask import Flask, jsonify
 
@@ -37,13 +38,49 @@ def get_tai_xiu(d1, d2, d3):
     return "Xỉu" if total <= 10 else "Tài"
 
 # --------------------------
+# Thuật toán Hùng Akira (convert sang Python)
 def ai_predict(history):
     if not history or len(history) < 3:
-        return "Tài" if time.time() % 2 == 0 else "Xỉu"
+        return "Tài" if random.random() > 0.5 else "Xỉu"
 
-    recent = [h["Ket_qua"] for h in history[:15]][::-1]
-    totals = [h.get("Tong", 0) for h in history[:15]][::-1]
+    # Lấy 20 phiên gần nhất
+    recent = [h["Ket_qua"] for h in history[:20]][::-1]
+    totals = [h.get("Tong", 0) for h in history[:20]][::-1]
 
+    tai_score = 0.0
+    xiu_score = 0.0
+
+    # Trend dài
+    tai_count = recent.count("Tài")
+    xiu_count = recent.count("Xỉu")
+    if tai_count > xiu_count:
+        tai_score += 0.4
+    elif xiu_count > tai_count:
+        xiu_score += 0.4
+
+    # Trend ngắn (5 phiên gần nhất)
+    short = recent[-5:]
+    if short.count("Tài") > short.count("Xỉu"):
+        tai_score += 0.3
+    elif short.count("Xỉu") > short.count("Tài"):
+        xiu_score += 0.3
+
+    # Pattern rule
+    if len(recent) >= 3:
+        if recent[-3:] == ["Tài", "Xỉu", "Tài"]:
+            xiu_score += 0.5
+        elif recent[-3:] == ["Xỉu", "Tài", "Xỉu"]:
+            tai_score += 0.5
+
+    # Trung bình tổng
+    if totals:
+        avg = sum(totals) / len(totals)
+        if avg > 10:
+            tai_score += 0.25
+        elif avg < 8:
+            xiu_score += 0.25
+
+    # Anti-streak
     streak = 1
     last = recent[-1]
     for r in reversed(recent[:-1]):
@@ -51,54 +88,26 @@ def ai_predict(history):
             streak += 1
         else:
             break
-
-    tai_score, xiu_score = 0.0, 0.0
-
-    # Trend balance
-    tai_count = recent.count("Tài")
-    xiu_count = recent.count("Xỉu")
-    if abs(tai_count - xiu_count) / len(recent) >= 0.25:
-        if tai_count > xiu_count:
-            xiu_score += 0.25
+    if streak >= 6:  # bẻ cầu
+        if last == "Tài":
+            xiu_score += 0.6
         else:
-            tai_score += 0.25
-
-    # Short pattern
-    if len(recent) >= 4:
-        if recent[-3:] == ["Tài", "Xỉu", "Tài"]:
-            xiu_score += 0.3
-        elif recent[-3:] == ["Xỉu", "Tài", "Xỉu"]:
-            tai_score += 0.3
-
-    # Mean deviation
-    if totals:
-        avg_score = sum(totals) / len(totals)
-        if avg_score > 10:
+            tai_score += 0.6
+    elif streak >= 4:  # theo cầu ngắn
+        if last == "Tài":
             tai_score += 0.2
-        elif avg_score < 8:
+        else:
             xiu_score += 0.2
 
-    # Streak logic
-    if streak >= 6:
-        if last == "Tài":
-            xiu_score += 0.35
-        else:
-            tai_score += 0.35
-    elif streak >= 4:
-        if last == "Tài":
-            tai_score += 0.15
-        else:
-            xiu_score += 0.15
-
     # Normalize
-    total_score = tai_score + xiu_score
-    if total_score > 0:
-        tai_score /= total_score
-        xiu_score /= total_score
+    total = tai_score + xiu_score
+    if total > 0:
+        tai_score /= total
+        xiu_score /= total
 
     # Random nếu cân bằng
     if abs(tai_score - xiu_score) < 0.15:
-        return "Tài" if time.time() % 2 == 0 else "Xỉu"
+        return "Tài" if random.random() > 0.5 else "Xỉu"
 
     return "Tài" if tai_score > xiu_score else "Xỉu"
 
