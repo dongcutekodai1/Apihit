@@ -263,6 +263,5 @@ if __name__ == "__main__":
     thread_md5 = threading.Thread(target=poll_md5, daemon=True)
     thread_md5.start()
     logger.info("Đã bắt đầu polling dữ liệu MD5.")
-    port = int(os.environ.get("PORT", 5000))
-
+    port = int(os.environ.get("PORT", 8000))
     app.run(host=HOST, port=port)
